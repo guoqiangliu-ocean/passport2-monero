@@ -202,6 +202,9 @@ Additional rules:
   containing tuple, pair, or integral container explicitly selects varints.
 - Container lengths are uvarints. Unsigned integral elements wider than one
   byte in standard containers are also encoded as uvarints.
+- `vector<crypto::signature>` is a specialized exception: its required size is
+  supplied by the enclosing transaction serializer and its signatures are
+  written as packed 64-byte blobs, without a vector-length prefix.
 - Variant tags occupy one byte and are followed by the selected value.
 - `crypto::public_key`, `crypto::secret_key`, `crypto::key_image`, and
   `rct::key` are 32-byte blobs. `rct::ctkey` is the 64-byte concatenation
@@ -470,11 +473,12 @@ The one-byte input and output tags are registered at
 After the prefix, the complete transaction serializer follows the branches in
 [`cryptonote_basic.h`](https://github.com/monero-project/monero/blob/4f92268d7c16741cfb41e5bbe2aa46cc260a9ea5/src/cryptonote_basic/cryptonote_basic.h#L242-L317):
 
-- Version `1` writes legacy signatures. The outer signature array is traversed
-  using `vin.size()` and begins without a vector-length prefix. Each per-input
-  `vector<signature>` uses the normal container encoding, so it begins with a
-  uvarint element count. When saving, that inner vector's size must equal
-  `get_signature_size(vin[i])`.
+- Version `1` writes legacy signatures. Their dimensions are derived from
+  `vin`; neither the outer signature array nor each per-input signature vector
+  has a vector-length prefix. The serializer prepares each inner vector with
+  `get_signature_size(vin[i])`, verifies that size when saving, and uses the
+  specialized [`vector<crypto::signature>` serializer](https://github.com/monero-project/monero/blob/4f92268d7c16741cfb41e5bbe2aa46cc260a9ea5/src/serialization/crypto.h#L41-L78)
+  to write the raw 64-byte signatures.
 - Version `2`, with at least one input, writes the RingCT base.
 - A full, unpruned transaction whose RingCT type is not `Null` then writes the
   RingCT prunable part.
